@@ -1,0 +1,1 @@
+myblockchain send -from '["liyuechun", "zhangqiang"]' -to '["junC", "xiaoyong"]' -amount '["4", "6"]'
