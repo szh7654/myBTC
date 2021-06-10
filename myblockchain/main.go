@@ -1,16 +1,15 @@
 package main
 
 import (
-	"./BLC"
+	"bufio"
+	"fmt"
+	"github.com/szh7654/simpleBTC/BLC"
+	"log"
+	"os"
 )
 
 func main() {
-
 	cli := BLC.CLI{}
 	cli.Run()
-	//blc := BLC.BlockchainObject()
-	//unUTXO := blc.UnUTXOs("liyuechun")
-	//for i := 0; i < len(unUTXO); i++ {
-	//	fmt.Println(unUTXO[i])
-	//}
+
 }
