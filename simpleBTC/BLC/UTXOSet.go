@@ -13,13 +13,9 @@ type UTXOSet struct {
 	blockChain *Blockchain
 }
 
-/*
-	查询block块中所有的未花费utxo：执行FindUnspentUTXOMap--->map
-*/
-func (utxoset *UTXOSet) ResetUTXOSet() {
-	//blockchain.GetAllUTXOs 涉及到数据库, 现在要放在下面打开数据库的命令之前.不然卡死
-	utxoMap := utxoset.blockChain.GetAllUTXOs()
 
+func (utxoset *UTXOSet) ResetUTXOSet() {
+	utxoMap := utxoset.blockChain.GetAllUTXOs()
 	DBName := fmt.Sprintf(DBName, os.Getenv("NODE_ID"))
 	fmt.Println(DBName)
 	db, err := bolt.Open(DBName, 0600, nil)
@@ -29,7 +25,6 @@ func (utxoset *UTXOSet) ResetUTXOSet() {
 	defer db.Close()
 
 	err = db.Update(func(tx *bolt.Tx) error {
-		//1.utxoset表存在，删除
 		b := tx.Bucket([]byte(UTXOSetBucketName))
 		if b != nil {
 			err := tx.DeleteBucket([]byte(UTXOSetBucketName))
@@ -59,18 +54,13 @@ func (utxoset *UTXOSet) ResetUTXOSet() {
 
 }
 
-/*
-	查询对应地址的余额
-*/
 func (utxoSet *UTXOSet) GetBalance(address string) int64 {
 	var total int64
-
 	utxos := utxoSet.FindPackedUTXO(address)
 
 	for _, utxo := range utxos {
 		total += utxo.Output.Value
 	}
-
 	return total
 }
 
@@ -146,14 +136,9 @@ func (utxoSet *UTXOSet) FindUnpackedUTXO(from string, txs []*Transaction) []*UTX
 	return utxos
 }
 
-/*
-	更新数据库UTXO
-*/
-func (utxoSet *UTXOSet) Update() {
-	//对最后一个区块进行处理
-	lastBlock := utxoSet.blockChain.Iterator().Next()
 
-	//遍历TXs 获取所有input
+func (utxoSet *UTXOSet) Update() {
+	lastBlock := utxoSet.blockChain.Iterator().Next()
 	inputs := []*Input{}
 	for _, tx := range lastBlock.Transactions {
 		if !tx.IsCoinBaseTransaction() {
@@ -163,17 +148,14 @@ func (utxoSet *UTXOSet) Update() {
 		}
 	}
 
-	//遍历TXs 获取UTXO
 	outsMap := make(map[string]*UTXOArray)
 	for _, tx := range lastBlock.Transactions {
-		//每个交易中的utxo数组
 		utxos := []*UTXO{}
 		for outIndex, txOut := range tx.Outputs {
 			isSpent := false
 			for _, input := range inputs {
 				if input.IndexOfOutputs == outIndex &&
 					bytes.Compare(input.TransactionHash, tx.TransactionHash) == 0 {
-					//已花费
 					isSpent = true
 					break
 				}
@@ -191,14 +173,6 @@ func (utxoSet *UTXOSet) Update() {
 		}
 	}
 
-	//for txid, outputs := range outsMap {
-	//	fmt.Printf("---------transactionHash :%s", txid)
-	//	for _, utxo := range outputs.UTXOs {
-	//		fmt.Println(utxo)
-	//	}
-	//}
-
-	//获取utxo表,将input对应的utxo删除, 添加outsMap中的utxo
 	DBName := fmt.Sprintf(DBName, os.Getenv("NODE_ID"))
 	db, err := bolt.Open(DBName, 0600, nil)
 	if err != nil {
@@ -209,7 +183,6 @@ func (utxoSet *UTXOSet) Update() {
 	err = db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(UTXOSetBucketName))
 		if b != nil {
-			//1.删除inputs对应的utxo
 			for _, input := range inputs {
 				outputsBytes := b.Get(input.TransactionHash)
 				if len(outputsBytes) == 0 {
@@ -217,25 +190,19 @@ func (utxoSet *UTXOSet) Update() {
 				}
 
 				outputs := DeserializeTxOutputs(outputsBytes)
-
-				//是否需要被删除
 				isNeedDelete := false
 
-				//将当前outputs里面未被消费的utxo 保存起来
 				utxos := []*UTXO{}
 
 				for _, utxo := range outputs.UTXOs {
 					if bytes.Compare(utxo.TransactionHash, input.TransactionHash) == 0 &&
 						input.IndexOfOutputs == utxo.Index &&
 						input.UnlockWithAddress(utxo.Output.PubKeyHash) {
-						//已花费
 						isNeedDelete = true
 						continue
 					}
-
 					utxos = append(utxos, utxo)
 				}
-
 				if isNeedDelete {
 					err := b.Delete(input.TransactionHash)
 					if err != nil {
@@ -247,10 +214,7 @@ func (utxoSet *UTXOSet) Update() {
 						b.Put(input.TransactionHash, gobEncode(outputs))
 					}
 				}
-
 			}
-
-			//2.添加outsMap 到数据库中
 			for transactionHash, outputs := range outsMap {
 				transactionHashBytes, _ := hex.DecodeString(transactionHash)
 				b.Put(transactionHashBytes, gobEncode(outputs))
