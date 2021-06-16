@@ -141,11 +141,7 @@ func handleGetBlocksHash(request []byte, bc *Blockchain) {
 	sendHash(getblocks.from, BLOCK_TYPE, blocksHashes)
 }
 
-/*
-	处理Inv命令
-	1. block type :  如果本地区块
 
-*/
 func handleInv(request []byte, bc *Blockchain) {
 	commandBytes := request[COMMAND_LENGTH:]
 
@@ -174,14 +170,9 @@ func handleInv(request []byte, bc *Blockchain) {
 }
 
 func handleGetData(request []byte, bc *Blockchain) {
-	//1.从request中获取版本的数据：[]byte
 	commandBytes := request[COMMAND_LENGTH:]
-
-	//2.反序列化--->version
 	var getData GetData
-
 	decoder := gob.NewDecoder(bytes.NewReader(commandBytes))
-
 	err := decoder.Decode(&getData)
 	if err != nil {
 		log.Panic(err)
@@ -196,14 +187,9 @@ func handleGetData(request []byte, bc *Blockchain) {
 }
 
 func handleGetBlockData(request []byte, bc *Blockchain) {
-	//1.从request中获取版本的数据：[]byte
 	commandBytes := request[COMMAND_LENGTH:]
-
-	//2.反序列化--->version
 	var getBlockData BlockData
-
 	decoder := gob.NewDecoder(bytes.NewReader(commandBytes))
-
 	err := decoder.Decode(&getBlockData)
 	if err != nil {
 		log.Panic(err)
@@ -230,73 +216,42 @@ func handleGetBlockData(request []byte, bc *Blockchain) {
 
 }
 
-/*
-	主节点处理接收到的交易
-*/
 func handleTransactions(request []byte, bc *Blockchain) {
-	//1.从request中获取版本的数据：[]byte
 	commandBytes := request[COMMAND_LENGTH:]
-
-	//2.反序列化--->version
 	var txs []*Transaction
-
 	decoder := gob.NewDecoder(bytes.NewReader(commandBytes))
 
 	err := decoder.Decode(&txs)
 	if err != nil {
 		log.Panic(err)
 	}
-
-	//发送到挖矿节点
 	sendTransactionToMiner(knowNodes[1], txs)
-
-	//for _, tx := range txs {
-	//	//fmt.Println("处理获取到的txs")
-	//	//fmt.Println(tx)
-	//}
 }
 
 func handleRequireMine(request []byte, bc *Blockchain) {
-	//1.从request中获取版本的数据：[]byte
 	commandBytes := request[COMMAND_LENGTH:]
-	//fmt.Println("反序列化得到的txbytes：")
-	//fmt.Printf("%x",commandBytes)
-	//fmt.Println("-----")
-
-	//2.反序列化--->version
 	var txs []*Transaction
-
 	decoder := gob.NewDecoder(bytes.NewReader(commandBytes))
 
 	err := decoder.Decode(&txs)
 	if err != nil {
 		log.Panic(err)
 	}
-
-	//fmt.Printf("%x",gobEncode(txs))
-
 	nodeID := os.Getenv("NODE_ID")
 	txp := NewTXPool(nodeID)
 	//将txs保存到交易池
 	txp.Txs = append(txp.Txs, txs...)
-	//for _, tx := range txp.Transactions {
-	//	fmt.Println(tx)
-	//}
 	txp.saveFile(nodeID)
 
 	const packageNum = 1
 
-	//2. 判断交易池是否有足够的交易
+	//判断交易池是否有足够的交易
 	if len(txp.Txs) > 0 {
 		//开始挖矿
 		fmt.Println("开始挖矿")
-
 		blockchain := BlockchainObject(nodeID)
-
 		//取出要打包的交易
-		//packageTx := txp.Transactions[:packageNum]
 		newBlock := blockchain.MineNewBlock(txs)
-		//fmt.Println(newBlock)
 		txp.Txs = txp.Txs[packageNum:]
 		txp.saveFile(nodeID)
 		//发送newBlock 给主节点验证工作量证明
@@ -305,14 +260,9 @@ func handleRequireMine(request []byte, bc *Blockchain) {
 }
 
 func handleVerifyBlock(request []byte, blockchain *Blockchain) {
-	//1.从request中获取版本的数据：[]byte
 	commandBytes := request[COMMAND_LENGTH:]
-
-	//2.反序列化--->version
 	var block *Block
-
 	decoder := gob.NewDecoder(bytes.NewReader(commandBytes))
-
 	err := decoder.Decode(&block)
 	if err != nil {
 		log.Panic(err)
@@ -323,26 +273,17 @@ func handleVerifyBlock(request []byte, blockchain *Blockchain) {
 		blockchain.SaveNewBlockToBlockchain(block)
 		utxoSet := &UTXOSet{blockchain}
 		utxoSet.Update()
-
-		//这里直接调起一次version命令  更新挖矿节点的区块
 		sendVersion(knowNodes[1], blockchain)
 	}
 
 }
 
-/*
-	所有消息都是通过这个方法来发送到其他节点
-*/
 func sendData(to string, data []byte) {
-	//fmt.Println("向",to,"发送",data)
 	conn, err := net.Dial("tcp", to)
 	if err != nil {
 		log.Panic(err)
 	}
-
 	defer conn.Close()
-
-	//发送数据
 	_, err = io.Copy(conn, bytes.NewReader(data))
 	if err != nil {
 		log.Panic(err)
@@ -368,29 +309,17 @@ func sendHash(to string, kind string, data [][]byte) {
 	sendCommandData(COMMAND_INV, inv, to)
 }
 
-/*
-	发送请求对方根据hash返回对应的block的消息
-*/
-func sendGetData(to string, kind string, hash []byte) {
-	//1.创建对象
-	getData := GetData{nodeAddress, kind, hash}
 
+func sendGetData(to string, kind string, hash []byte) {
+	getData := GetData{nodeAddress, kind, hash}
 	sendCommandData(COMMAND_GETDATA, getData, to)
 }
 
-/*
-	发送block对象给对方
-*/
 func sendBlock(to string, block *Block) {
-	//1.创建对象
 	blockData := BlockData{nodeAddress, gobEncode(block)}
-
 	sendCommandData(COMMAND_BLOCKDATA, blockData, to)
 }
 
-/*
-	发送交易信息到主节点
-*/
 func sendTransactionToMainNode(to string, txs []*Transaction) {
 	sendCommandData(COMMAND_TXS, txs, to)
 }
@@ -404,10 +333,7 @@ func sendNewBlockToMain(to string, block *Block) {
 }
 
 func sendCommandData(command string, data interface{}, to string) {
-	//2.对象序列化为[]byte
 	payload := gobEncode(data)
-	//3.拼接命令和对象序列化
 	request := append(commandToBytes(command), payload...)
-	//4.发送消息
 	sendData(to, request)
 }
